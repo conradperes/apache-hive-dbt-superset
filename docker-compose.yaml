@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+
+  postgres-metastore:
+    image: postgres:13
+    container_name: postgres-metastore
+    environment:
+      POSTGRES_DB: metastore
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hivepass
+    ports:
+      - "5432:5432"
+
+  hive-metastore:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hive-metastore
+    depends_on:
+      - postgres-metastore
+    environment:
+      HIVE_VERSION: 2.3.2
+      HADOOP_VERSION: 2.7.4
+      SERVICE: metastore
+      DB_TYPE: postgres
+      DB_HOST: postgres-metastore
+      DB_PORT: 5432
+      DB_NAME: metastore
+      DB_USER: hive
+      DB_PASSWORD: hivepass
+    ports:
+      - "9083:9083"
+
+  hive-server:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hive-server
+    depends_on:
+      - hive-metastore
+    environment:
+      HIVE_VERSION: 2.3.2
+      HADOOP_VERSION: 2.7.4
+      SERVICE: hiveserver2
+      DB_TYPE: postgres
+      DB_HOST: postgres-metastore
+      DB_PORT: 5432
+      DB_NAME: metastore
+      DB_USER: hive
+      DB_PASSWORD: hivepass
+    ports:
+      - "10000:10000"
+
+  hue:
+    image: gethue/hue:latest
+    container_name: rui
+    ports:
+      - "8888:8888"
+    environment:
+      - HUE_DATABASE_ENGINE=sqlite
+      - HUE_DATABASE_NAME=hue
+    depends_on:
+      - hive-server
+
+  superset:
+    image: apache/superset
+    container_name: super7
+    environment:
+      - SUPERSET_SECRET_KEY=supersecret
+      - ADMIN_USERNAME=admin
+      - ADMIN_FIRSTNAME=Admin
+      - ADMIN_LASTNAME=User
+      - ADMIN_EMAIL=admin@superset.com
+      - ADMIN_PASSWORD=admin
+    ports:
+      - "8088:8088"
+    depends_on:
+      - hive-server
+
+  dbt:
+    image: fishtownanalytics/dbt:1.0.0
+    container_name: dbt
+    volumes:
+      - ./dbt:/usr/app
+    working_dir: /usr/app
+    stdin_open: true
+    tty: true
+    depends_on:
+      - hive-server
